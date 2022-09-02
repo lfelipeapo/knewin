@@ -1,0 +1,81 @@
+version: "3.9"
+services:
+  elasticsearch:
+    image: elasticsearch:8.2.2
+    container_name: elasticsearch
+    environment:
+      - cluster.name=knewin-cluster
+      - node.name=knewin
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - laravel
+
+  kibana:
+    image: kibana:8.2.2
+    ports:
+      - "5601:5601"
+    networks:
+      - laravel
+  database:
+    image: postgres
+    container_name: database
+    restart: unless-stopped
+    build:
+      context: ./docker-compose/db
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_DB: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+      APP_DB_USER: "docker"
+      APP_DB_PASS: "docker"
+      APP_DB_NAME: "knewin"
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker-compose/db/postgres-data:/var/lib/postgresql/data
+    networks:
+      - laravel
+  app:
+    build:
+      args:
+        user: knewin
+        uid: 1000
+      context: .
+      dockerfile: ./docker-compose/php/Dockerfile
+    image: laravel
+    container_name: laravel-app
+    restart: unless-stopped
+    working_dir: /var/www/
+    volumes:
+      - ./app/:/var/www
+    depends_on:
+      - elasticsearch
+    networks:
+      - laravel
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-app
+    restart: unless-stopped
+    ports:
+      - 8000:80
+    volumes:
+      - ./app:/var/www
+      - ./docker-compose/nginx:/etc/nginx/conf.d/
+    depends_on:
+      - elasticsearch
+    networks:
+      - laravel
+
+volumes:
+  es_data:
+    driver: local
+networks:
+  laravel:
+    driver: bridge
